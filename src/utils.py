@@ -103,4 +103,6 @@ def set_config(args, game):
     config["algo"]["delta_clip"] = args.delta_clip
     config["algo"]["prioritized_replay"] = args.prioritized_replay
 
+    config["algo"]["phase_split"] = args.phase_split
+
     return config

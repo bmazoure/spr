@@ -38,6 +38,7 @@ class SPRCategoricalDQN(CategoricalDQN):
                  time_offset=0,
                  distributional=1,
                  jumps=0,
+                 phase_split=0,
                  **kwargs):
         super().__init__(**kwargs)
         self.opt_info_fields = tuple(f for f in ModelOptInfo._fields)  # copy
@@ -48,6 +49,7 @@ class SPRCategoricalDQN(CategoricalDQN):
         self.model_rl_weight = model_rl_weight
         self.time_offset = time_offset
         self.jumps = jumps
+        self.phase_split = phase_split
 
         if not distributional:
             self.rl_loss = self.dqn_rl_loss
@@ -89,9 +91,13 @@ class SPRCategoricalDQN(CategoricalDQN):
             # We're probably dealing with DDP
             self.optimizer = self.OptimCls(self.agent.model.module.parameters(),
                 lr=self.learning_rate, **self.optim_kwargs)
+            self.optimizer_rl = self.OptimCls(self.agent.model.head.parameters(),
+                lr=self.learning_rate, **self.optim_kwargs)
             self.model = self.agent.model.module
         except:
             self.optimizer = self.OptimCls(self.agent.model.parameters(),
+                lr=self.learning_rate, **self.optim_kwargs)
+            self.optimizer_rl = self.OptimCls(self.agent.model.head.parameters(),
                 lr=self.learning_rate, **self.optim_kwargs)
             self.model = self.agent.model
         if self.initial_optim_state_dict is not None:
@@ -126,15 +132,16 @@ class SPRCategoricalDQN(CategoricalDQN):
         opt_info = ModelOptInfo(*([] for _ in range(len(ModelOptInfo._fields))))
         if itr < self.min_itr_learn:
             return opt_info
-        for _ in range(self.updates_per_optimize):
+        N_UPDATES = self.updates_per_optimize//2 if self.phase_split == 1 else self.updates_per_optimize
+        
+        for _ in range(N_UPDATES):
             samples_from_replay = self.replay_buffer.sample_batch(self.batch_size)
             loss, td_abs_errors, model_rl_loss, reward_loss, t0_spr_loss, model_spr_loss = self.loss(samples_from_replay)
             spr_loss = self.t0_spr_loss_weight*t0_spr_loss + self.model_spr_weight*model_spr_loss
-            total_loss = loss + self.model_rl_weight*model_rl_loss \
-                              + self.reward_loss_weight*reward_loss
-            total_loss = total_loss + spr_loss
+            total_loss = loss + self.model_rl_weight*model_rl_loss + self.reward_loss_weight*reward_loss + spr_loss
+            # total_loss = total_loss + spr_loss
             self.optimizer.zero_grad()
-            total_loss.backward()
+            loss.backward()
             grad_norm = torch.nn.utils.clip_grad_norm_(
                 self.model.stem_parameters(), self.clip_grad_norm)
             if len(list(self.model.dynamics_model.parameters())) > 0:
@@ -156,6 +163,35 @@ class SPRCategoricalDQN(CategoricalDQN):
             self.update_counter += 1
             if self.update_counter % self.target_update_interval == 0:
                 self.agent.update_target(self.target_update_tau)
+        if self.phase_split == 1:
+            for _ in range(N_UPDATES):
+                samples_from_replay = self.replay_buffer.sample_batch(self.batch_size)
+                loss, td_abs_errors, model_rl_loss, reward_loss, t0_spr_loss, model_spr_loss = self.loss(samples_from_replay)
+                spr_loss = self.t0_spr_loss_weight*t0_spr_loss + self.model_spr_weight*model_spr_loss
+                total_loss = self.model_rl_weight*model_rl_loss + self.reward_loss_weight*reward_loss + spr_loss
+                self.optimizer_rl.zero_grad()
+                total_loss.backward()
+                grad_norm = torch.nn.utils.clip_grad_norm_(
+                    self.model.stem_parameters(), self.clip_grad_norm)
+                if len(list(self.model.dynamics_model.parameters())) > 0:
+                    model_grad_norm = torch.nn.utils.clip_grad_norm_(
+                        self.model.dynamics_model.parameters(), self.clip_grad_norm)
+                else:
+                    model_grad_norm = 0
+                self.optimizer_rl.step()
+                if self.prioritized_replay:
+                    self.replay_buffer.update_batch_priorities(td_abs_errors)
+                opt_info.loss.append(loss.item())
+                opt_info.gradNorm.append(torch.tensor(grad_norm).item())  # grad_norm is a float sometimes, so wrap in tensor
+                opt_info.modelRLLoss.append(model_rl_loss.item())
+                opt_info.RewardLoss.append(reward_loss.item())
+                opt_info.modelGradNorm.append(torch.tensor(model_grad_norm).item())
+                opt_info.SPRLoss.append(spr_loss.item())
+                opt_info.ModelSPRLoss.append(model_spr_loss.item())
+                opt_info.tdAbsErr.extend(td_abs_errors[::8].numpy())  # Downsample.
+                self.update_counter += 1
+                if self.update_counter % self.target_update_interval == 0:
+                    self.agent.update_target(self.target_update_tau)
         self.update_itr_hyperparams(itr)
         return opt_info
 

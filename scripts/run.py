@@ -73,7 +73,7 @@ if __name__ == "__main__":
     """"
     Procgen
 
-    python -m scripts.run --public --game leaper --augmentation none --target-augmentation 0 --momentum-tau 0.01 --dropout 0.5 --framestack 1 --grayscale 0
+    python -m scripts.run --public --augmentation none --target-augmentation 0 --momentum-tau 0.01 --dropout 0.5 --framestack 1 --grayscale 0 --game leaper --phase_split 1
 
     """
     import argparse
@@ -140,6 +140,8 @@ if __name__ == "__main__":
     parser.add_argument('--cuda_idx', help='gpu to use ', type=int, default=0)
     parser.add_argument('--max-grad-norm', type=float, default=10., help='Max Grad Norm')
     parser.add_argument('--public', action='store_true', help='If set, uses anonymous wandb logging')
+
+    parser.add_argument('--phase_split', type=int, default=0)
     args = parser.parse_args()
 
     if args.public:
