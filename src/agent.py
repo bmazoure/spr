@@ -19,8 +19,7 @@ class SPRAgent(AtariCatDqnAgent):
     def __call__(self, observation, prev_action, prev_reward, train=False):
         """Returns Q-values for states/observations (with grad)."""
         if train:
-            model_inputs = buffer_to((observation, prev_action, prev_reward),
-                device=self.device)
+            model_inputs = buffer_to((observation, prev_action, prev_reward),device=self.device)
             return self.model(*model_inputs, train=train)
         else:
             prev_action = self.distribution.to_onehot(prev_action)
@@ -99,7 +98,7 @@ class SPRActionSelection(torch.nn.Module):
         while len(obs.shape) <= 4:
             obs.unsqueeze_(0)
         obs = obs.to(self.device).float() / 255.
-
+        
         value = self.network.select_action(obs)
         action = self.select_action(value)
         # Stupid, stupid hack because rlpyt does _not_ handle batch_b=1 well.

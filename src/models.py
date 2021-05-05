@@ -61,7 +61,7 @@ class SPRCatDqnModel(torch.nn.Module):
         """Instantiates the neural network according to arguments; network defaults
         stored within this method."""
         super().__init__()
-
+        
         self.noisy = noisy_nets
         self.time_offset = time_offset
         self.aug_prob = aug_prob
@@ -108,8 +108,13 @@ class SPRCatDqnModel(torch.nn.Module):
             self.eval_transforms.append(eval_transformation)
 
         self.dueling = dueling
-        f, c = image_shape[:2]
-        in_channels = np.prod(image_shape[:2])
+        if len(image_shape) == 3:
+            f = 1
+            c = image_shape[0]
+        else:
+            f, c = image_shape[:2]
+        in_channels = f*c
+        
         self.conv = Conv2dModel(
             in_channels=in_channels,
             channels=[32, 64, 64],
@@ -119,8 +124,8 @@ class SPRCatDqnModel(torch.nn.Module):
             use_maxpool=False,
             dropout=dropout,
         )
-
-        fake_input = torch.zeros(1, f*c, imagesize, imagesize)
+        
+        fake_input = torch.zeros(1, f*c, 64, 64)
         fake_output = self.conv(fake_input)
         self.hidden_size = fake_output.shape[1]
         self.pixels = fake_output.shape[-1]*fake_output.shape[-2]
@@ -435,6 +440,7 @@ class SPRCatDqnModel(torch.nn.Module):
             pred_reward = []
             pred_latents = []
             input_obs = observation[0].flatten(1, 2)
+            # input_obs = observation[0]
             input_obs = self.transform(input_obs, augment=True)
             latent = self.stem_forward(input_obs,
                                        prev_action[0],
@@ -469,6 +475,8 @@ class SPRCatDqnModel(torch.nn.Module):
             return log_pred_ps, pred_reward, spr_loss
 
         else:
+            # if observation.shape[0] == 1:
+            # observation = observation.permute(1,0,2,3,4)
             aug_factor = self.target_augmentation if not eval else self.eval_augmentation
             observation = observation.flatten(-4, -3)
             stacked_observation = observation.unsqueeze(1).repeat(1, max(1, aug_factor), 1, 1, 1)
@@ -478,7 +486,7 @@ class SPRCatDqnModel(torch.nn.Module):
 
             # Infer (presence of) leading dimensions: [T,B], [B], or [].
             lead_dim, T, B, img_shape = infer_leading_dims(img, 3)
-
+            
             conv_out = self.conv(img.view(T * B, *img_shape))  # Fold if T dimension.
             if self.renormalize:
                 conv_out = renormalize(conv_out, -3)

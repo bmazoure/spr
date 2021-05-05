@@ -23,15 +23,17 @@ from src.agent import SPRAgent
 from src.rlpyt_atari_env import AtariEnv
 from src.utils import set_config
 
+from src.procgen import make_procgen_env, ProcgenVecEnvCustom
+
 
 def build_and_train(game="pong", run_ID=0, cuda_idx=0, args=None):
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
-    env = AtariEnv
+    # env = AtariEnv
     config = set_config(args, game)
 
     sampler = SerialSampler(
-        EnvCls=env,
+        EnvCls=AtariEnv if args.game == 'pong' else ProcgenVecEnvCustom,
         TrajInfoCls=AtariTrajInfo,  # default traj info + GameScore
         env_kwargs=config["env"],
         eval_env_kwargs=config["eval_env"],
@@ -68,14 +70,20 @@ def build_and_train(game="pong", run_ID=0, cuda_idx=0, args=None):
 
 
 if __name__ == "__main__":
+    """"
+    Procgen
+
+    python -m scripts.run --public --game leaper --augmentation none --target-augmentation 0 --momentum-tau 0.01 --dropout 0.5 --framestack 1 --grayscale 0
+
+    """
     import argparse
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--game', help='Atari game', default='ms_pacman')
+    parser.add_argument('--game', help='Procgen game', default='coinrun')
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--grayscale', type=int, default=1)
     parser.add_argument('--framestack', type=int, default=4)
     parser.add_argument('--imagesize', type=int, default=84)
-    parser.add_argument('--n-steps', type=int, default=100000)
+    parser.add_argument('--n-steps', type=int, default=int(8e6))
     parser.add_argument('--dqn-hidden-size', type=int, default=256)
     parser.add_argument('--target-update-interval', type=int, default=1)
     parser.add_argument('--target-update-tau', type=float, default=1.)
@@ -135,9 +143,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.public:
-        wandb.init(anonymous="allow", config=args, tags=[args.tag] if args.tag else None, dir=args.wandb_dir)
+        wandb.init(anonymous="allow", config=args, tags=[args.tag] if args.tag else None, dir=args.wandb_dir,mode="disabled")
     else:
-        wandb.init(project=args.project, entity=args.entity, config=args, tags=[args.tag] if args.tag else None, dir=args.wandb_dir)
+        wandb.init(project=args.project, entity=args.entity, config=args, tags=[args.tag] if args.tag else None, dir=args.wandb_dir,mode="disabled")
     wandb.config.update(vars(args))
     build_and_train(game=args.game,
                     cuda_idx=args.cuda_idx,

@@ -128,8 +128,7 @@ class SPRCategoricalDQN(CategoricalDQN):
             return opt_info
         for _ in range(self.updates_per_optimize):
             samples_from_replay = self.replay_buffer.sample_batch(self.batch_size)
-            loss, td_abs_errors, model_rl_loss, reward_loss,\
-            t0_spr_loss, model_spr_loss = self.loss(samples_from_replay)
+            loss, td_abs_errors, model_rl_loss, reward_loss, t0_spr_loss, model_spr_loss = self.loss(samples_from_replay)
             spr_loss = self.t0_spr_loss_weight*t0_spr_loss + self.model_spr_weight*model_spr_loss
             total_loss = loss + self.model_rl_weight*model_rl_loss \
                               + self.reward_loss_weight*reward_loss

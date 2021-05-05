@@ -16,16 +16,32 @@ class dummy_context_mgr:
 def set_config(args, game):
     # TODO: Use Hydra to manage configs
     config = configs['ernbw']
-    config['env']['game'] = game
-    config["env"]["grayscale"] = args.grayscale
-    config["env"]["num_img_obs"] = args.framestack
-    config["eval_env"]["game"] = config["env"]["game"]
-    config["eval_env"]["grayscale"] = args.grayscale
-    config["eval_env"]["num_img_obs"] = args.framestack
-    config['env']['imagesize'] = args.imagesize
-    config['eval_env']['imagesize'] = args.imagesize
-    config['env']['seed'] = args.seed
-    config['eval_env']['seed'] = args.seed
+    
+    if args.game != 'pong':
+        config['env']['env_name'] = args.game
+        config['env']['num_levels'] = 200
+        config['env']['mode'] = 'easy'
+        config['env']['paint_vel_info'] = True
+        config['env']['num_envs'] = 1
+        
+        config['eval_env']['env_name'] = args.game
+        config['eval_env']['num_levels'] = 0
+        config['eval_env']['mode'] = 'easy'
+        config['eval_env']['paint_vel_info'] = True
+        config['eval_env']['num_envs'] = 1
+    else:
+        config["env"]["game"] = args.game
+        config["env"]["grayscale"] = args.grayscale
+        config["env"]["num_img_obs"] = args.framestack
+
+        config["eval_env"]["game"] = config["env"]["game"]
+        config["eval_env"]["grayscale"] = args.grayscale
+        config["eval_env"]["num_img_obs"] = args.framestack
+        config['env']['imagesize'] = 64
+        config['eval_env']['imagesize'] = 64 #args.imagesize
+        config['env']['seed'] = args.seed
+        config['eval_env']['seed'] = args.seed
+
     config["model"]["dueling"] = bool(args.dueling)
     config["algo"]["min_steps_learn"] = args.min_steps_learn
     config["algo"]["n_step_return"] = args.n_step
@@ -40,7 +56,7 @@ def set_config(args, game):
     config['algo']['pri_beta_steps'] = int(10e4)
     config['optim']['eps'] = 0.00015
     config["sampler"]["eval_max_trajectories"] = 100
-    config["sampler"]["eval_n_envs"] = 100
+    config["sampler"]["eval_n_envs"] = 32
     config["sampler"]["eval_max_steps"] = 100*28000  # 28k is just a safe ceiling
     config['sampler']['batch_B'] = args.batch_b
     config['sampler']['batch_T'] = args.batch_t
