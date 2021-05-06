@@ -146,18 +146,6 @@ class MinibatchRlEvalWandb(MinibatchRlEval):
                     values = [info[k] for info in traj_infos]
                     logger.record_tabular_misc_stat(k,
                                                     values)
-<<<<<<< HEAD
-
-                    wandb.run.summary[k] = np.average(values)
-                    self.wandb_info[k + "Average"] = np.average(values)
-                    self.wandb_info[k + "Std"] = np.std(values)
-                    self.wandb_info[k + "Min"] = np.min(values)
-                    self.wandb_info[k + "Max"] = np.max(values)
-                    self.wandb_info[k + "Median"] = np.median(values)
-                    if k == 'GameScore':
-                        wandb.run.summary[k] = np.average(values)
-                        self.wandb_info[k + "Average"] = np.average(values)
-=======
                     if 'Return' in k:
                         wandb.run.summary[k] = np.average(values)
                         self.wandb_info[self.env_name + "/" + k + "Average"] = np.average(values)
@@ -165,8 +153,9 @@ class MinibatchRlEvalWandb(MinibatchRlEval):
                     # self.wandb_info[k + "Min"] = np.min(values)
                     # self.wandb_info[k + "Max"] = np.max(values)
                     # self.wandb_info[k + "Median"] = np.median(values)
-                    # if k == 'GameScore':
->>>>>>> 044807de0422755438721831ab2508b472235d50
+                    if k == 'GameScore':
+                        wandb.run.summary[k] = np.average(values)
+                        self.wandb_info[self.env_name + "/" + k + "Average"] = np.average(values)
                     #     game = self.sampler.env_kwargs['game']
                     #     random_score = atari_random_scores[game]
                     #     der_score = atari_der_scores[game]
