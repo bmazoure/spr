@@ -456,5 +456,6 @@ class ProcgenTrajInfo(TrajInfo):
 
     def step(self, observation, action, reward, done, agent_info, env_info):
         super().step(observation, action, reward, done, agent_info, env_info)
+        print(env_info)
         rew = getattr(env_info, "r", 0)
         self.GameScore = rew
