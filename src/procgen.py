@@ -1,6 +1,6 @@
   
 import gym
-from rlpyt.envs.gym import GymEnvWrapper, EnvInfoWrapper, info_to_nt
+from rlpyt.envs.gym import EnvInfoWrapper, info_to_nt
 from rlpyt.spaces.gym_wrapper import GymSpaceWrapper
 from rlpyt.envs.base import EnvSpaces, EnvStep
 import procgen
@@ -8,6 +8,8 @@ import cv2, os
 import numpy as np
 from typing import Any, Dict, List, Sequence, Tuple
 from gym.spaces import Box, Dict, Discrete as DiscreteG
+
+from rlpyt.samplers.collections import TrajInfo
 
 from procgen import ProcgenGym3Env
 from procgen import ProcgenEnv
@@ -17,6 +19,118 @@ from baselines.common.vec_env import (
     VecNormalize,
     VecEnvWrapper
 )
+
+from gym import Wrapper
+from gym.wrappers.time_limit import TimeLimit
+
+from collections import namedtuple
+from rlpyt.utils.collections import is_namedtuple_class
+
+class GymEnvWrapper(Wrapper):
+    """Gym-style wrapper for converting the Openai Gym interface to the
+    rlpyt interface.  Action and observation spaces are wrapped by rlpyt's
+    ``GymSpaceWrapper``.
+    Output `env_info` is automatically converted from a dictionary to a
+    corresponding namedtuple, which the rlpyt sampler expects.  For this to
+    work, every key that might appear in the gym environments `env_info` at
+    any step must appear at the first step after a reset, as the `env_info`
+    entries will have sampler memory pre-allocated for them (so they also
+    cannot change dtype or shape).  (see `EnvInfoWrapper`, `build_info_tuples`,
+    and `info_to_nt` in file or more help/details)
+    Warning:
+        Unrecognized keys in `env_info` appearing later during use will be
+        silently ignored.
+    This wrapper looks for gym's ``TimeLimit`` env wrapper to
+    see whether to add the field ``timeout`` to env info.   
+    """
+
+    def __init__(self, env,
+            act_null_value=0, obs_null_value=0, force_float32=True):
+        super().__init__(env)
+        o = self.env.reset()
+        o, r, d, info = self.env.step(self.env.action_space.sample())
+        env_ = self.env
+        time_limit = isinstance(self.env, TimeLimit)
+        while not time_limit and hasattr(env_, "env"):
+            env_ = env_.env
+            time_limit = isinstance(env_, TimeLimit)
+        if time_limit:
+            info["timeout"] = False  # gym's TimeLimit.truncated invalid name.
+        self._time_limit = time_limit
+        self.action_space = GymSpaceWrapper(
+            space=self.env.action_space,
+            name="act",
+            null_value=act_null_value,
+            force_float32=force_float32,
+        )
+        self.observation_space = GymSpaceWrapper(
+            space=self.env.observation_space,
+            name="obs",
+            null_value=obs_null_value,
+            force_float32=force_float32,
+        )
+        build_info_tuples(info)
+
+    def step(self, action):
+        """Reverts the action from rlpyt format to gym format (i.e. if composite-to-
+        dictionary spaces), steps the gym environment, converts the observation
+        from gym to rlpyt format (i.e. if dict-to-composite), and converts the
+        env_info from dictionary into namedtuple."""
+        a = self.action_space.revert(action)
+        o, r, d, info = self.env.step(a)
+        obs = self.observation_space.convert(o)
+        if self._time_limit:
+            if "TimeLimit.truncated" in info:
+                info["timeout"] = info.pop("TimeLimit.truncated")
+            else:
+                info["timeout"] = False
+        info = info_to_nt(info)
+        
+        if isinstance(r, float):
+            r = np.dtype("float32").type(r)  # Scalar float32.
+        return EnvStep(obs, r, d, info)
+
+    def reset(self):
+        """Returns converted observation from gym env reset."""
+        return self.observation_space.convert(self.env.reset())
+
+    @property
+    def spaces(self):
+        """Returns the rlpyt spaces for the wrapped env."""
+        return EnvSpaces(
+            observation=self.observation_space,
+            action=self.action_space,
+        )
+
+def build_info_tuples(info, name="info"):
+    # Define namedtuples at module level for pickle.
+    # Only place rlpyt uses pickle is in the sampler, when getting the
+    # first examples, to avoid MKL threading issues...can probably turn
+    # that off, (look for subprocess=True --> False), and then might
+    # be able to define these directly within the class.
+    ntc = globals().get(name)  # Define at module level for pickle.
+    info_keys = [str(k).replace(".", "_") for k in info.keys()]
+    info_keys.append('rew')
+    if ntc is None:
+        globals()[name] = namedtuple(name, info_keys)
+    elif not (is_namedtuple_class(ntc) and
+            sorted(ntc._fields) == sorted(info_keys)):
+        raise ValueError(f"Name clash in globals: {name}.")
+    for k, v in info.items():
+        if isinstance(v, dict):
+            build_info_tuples(v, "_".join([name, k]))
+
+def info_to_nt(value, name="info"):
+    if not isinstance(value, dict):
+        return value
+    ntc = globals()[name]
+    # Disregard unrecognized keys:
+    values = {k: info_to_nt(v, "_".join([name, k]))
+        for k, v in value.items() if k in ntc._fields}
+    # Can catch some missing values (doesn't nest):
+    values.update({k: 0 for k in ntc._fields if k not in values})
+    return ntc(**values)
+
 
 class WarpFrame(gym.ObservationWrapper):
     def __init__(self, env, width=84, height=84, grayscale=True, dict_space_key=None):
@@ -84,6 +198,7 @@ class GymEnvWrapperFixed(GymEnvWrapper):
                 info["timeout"] = info.pop("TimeLimit.truncated")
             else:
                 info["timeout"] = False
+                
         info = info_to_nt(info)
         try:
             info = info.coins
@@ -137,33 +252,14 @@ class EpisodeRewardWrapper(gym.Wrapper):
                     self.aux_rewards[i,:] += info['aux_rew']
                     self.long_aux_rewards[i,:] += info['aux_rew']
 
-            # for i, d in enumerate(done):
-            #     if d:
-            #         epinfo = {'r': round(self.rewards[i], 6), 'l': self.lengths[i], 't': 0}
-            #         aux_dict = {}
+            for i, d in enumerate(done):
+                if d:
+                    infos['r'] =  round(self.rewards[i], 6)
 
-            #         for nr in range(self.num_aux_rews):
-            #             aux_dict['aux_' + str(nr)] = self.aux_rewards[i,nr]
-
-            #         if 'ale.lives' in infos[i]:
-            #             game_over_rew = np.nan
-
-            #             is_game_over = infos[i]['ale.lives'] == 0
-
-            #             if is_game_over:
-            #                 game_over_rew = self.long_aux_rewards[i,0]
-            #                 self.long_aux_rewards[i,:] = 0
-
-            #             aux_dict['game_over_rew'] = game_over_rew
-
-            #         epinfo['aux_dict'] = aux_dict
-
-            #         infos[i]['episode'] = epinfo
-
-            #         self.rewards[i] = 0
-            #         self.lengths[i] = 0
-            #         self.aux_rewards[i,:] = 0
-
+                    self.rewards[i] = 0
+                    self.lengths[i] = 0
+                    self.aux_rewards[i,:] = 0
+                    
             return obs, rew, done, infos
 
         self.reset = reset
@@ -280,5 +376,17 @@ class ProcgenVecEnvCustom():
     
     def step(self,action):
         o, r, x, info, = self.env.step(action)
-        info = [0.]
         return o.transpose(0,3,1,2), r[0], x[0], info
+
+class ProcgenTrajInfo(TrajInfo):
+    """TrajInfo class for use with Atari Env, to store raw game score separate
+    from clipped reward signal."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.GameScore = 0
+
+    def step(self, observation, action, reward, done, agent_info, env_info):
+        super().step(observation, action, reward, done, agent_info, env_info)
+        rew = getattr(env_info, "r", 0)
+        self.GameScore = rew

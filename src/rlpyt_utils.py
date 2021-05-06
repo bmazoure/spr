@@ -152,7 +152,9 @@ class MinibatchRlEvalWandb(MinibatchRlEval):
                     self.wandb_info[k + "Min"] = np.min(values)
                     self.wandb_info[k + "Max"] = np.max(values)
                     self.wandb_info[k + "Median"] = np.median(values)
-                    # if k == 'GameScore':
+                    if k == 'GameScore':
+                        wandb.run.summary[k] = np.average(values)
+                        self.wandb_info[k + "Average"] = np.average(values)
                     #     game = self.sampler.env_kwargs['game']
                     #     random_score = atari_random_scores[game]
                     #     der_score = atari_der_scores[game]
@@ -220,6 +222,8 @@ class MinibatchRlEvalWandb(MinibatchRlEval):
                 self.agent.train_mode(itr)
                 opt_info = self.algo.optimize_agent(itr, samples)
                 self.store_diagnostics(itr, traj_infos, opt_info)
+                if itr == 1:
+                    import ipdb;ipdb.set_trace()
                 if (itr + 1) % self.log_interval_itrs == 0:
                     eval_traj_infos, eval_time = self.evaluate_agent(itr)
                     self.log_diagnostics(itr, eval_traj_infos, eval_time)

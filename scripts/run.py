@@ -23,7 +23,7 @@ from src.agent import SPRAgent
 from src.rlpyt_atari_env import AtariEnv
 from src.utils import set_config
 
-from src.procgen import make_procgen_env, ProcgenVecEnvCustom
+from src.procgen import make_procgen_env, ProcgenVecEnvCustom, ProcgenTrajInfo
 
 
 def build_and_train(game="pong", run_ID=0, cuda_idx=0, args=None):
@@ -34,7 +34,7 @@ def build_and_train(game="pong", run_ID=0, cuda_idx=0, args=None):
 
     sampler = SerialSampler(
         EnvCls=AtariEnv if args.game == 'pong' else ProcgenVecEnvCustom,
-        TrajInfoCls=AtariTrajInfo,  # default traj info + GameScore
+        TrajInfoCls=ProcgenTrajInfo,  # default traj info + GameScore
         env_kwargs=config["env"],
         eval_env_kwargs=config["eval_env"],
         batch_T=config['sampler']['batch_T'],
@@ -56,7 +56,7 @@ def build_and_train(game="pong", run_ID=0, cuda_idx=0, args=None):
         sampler=sampler,
         n_steps=args.n_steps,
         affinity=dict(cuda_idx=cuda_idx),
-        log_interval_steps=args.n_steps//args.num_logs,
+        log_interval_steps=100,
         seed=args.seed,
         final_eval_only=args.final_eval_only,
     )
