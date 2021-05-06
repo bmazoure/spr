@@ -1,0 +1,74 @@
+description: SPR
+
+target:
+  service: amlk8s
+  name: itplabrl1cl1
+  vc: resrchvc
+  # cluster: wu2
+  # queue: bonus
+
+environment:
+  setup:
+    - export CUDA_VISIBLE_DEVICES='0'
+    - pip install wandb --upgrade --user
+    - git clone https://github.com/astooke/rlpyt.git
+    - cd rlpyt
+    - sed -i '19d' setup.py
+    - pip install -e .
+    - cd ..
+    - pip install kornia --user
+    - pip install procgen==0.10.4 --user
+  image: retachet/rl:rldim_12
+
+# environment:
+#   setup:
+#     - export CUDA_VISIBLE_DEVICES='0'
+#     - export MUJOCO_GL=osmesa
+#     - git clone https://github.com/astooke/rlpyt.git
+#     - cd rlpyt
+#     - sed -i '19d' setup.py
+#     - pip install -e .
+#     - cd ..
+#     - pip install kornia
+#     - pip install xmltodict
+#     - pip install torch==1.7.1
+#     - pip install comet-ml
+#     # - export PYTHONPATH=$(pwd)/rlpyt:$PYTHONPATH # add rlpyt to path
+#     # - pip install git+git://github.com/denisyarats/dmc2gym.git # dmc2gym
+#   image: bmazoure/rl:deep_rl_mujoco_latest
+
+
+code:
+  # local directory of the code. this will be uploaded to the server.
+  # $CONFIG_DIR is expanded to the directory of this config file
+  local_dir: $CONFIG_DIR/..
+
+search:
+  job_template:
+    name: gs__{env_name:s}__{phase_split:d}__{seed:d}
+    sku: G1
+    command:
+      - CUDA_VISIBLE_DEVICES=0 python -m scripts.run 
+        --public
+        --augmentation none
+        --target-augmentation 0
+        --momentum-tau 0.01
+        --dropout 0.5
+        --framestack 1
+        --grayscale 0
+        --game {env_name}
+        --phase_split {phase_split}
+        --seed {seed}
+  type: grid
+  max_trials: 1000
+  params:
+    - name: env_name
+      spec: discrete
+      # values: [leaper]
+      values: [bigfish, bossfight, caveflyer, chaser, climber, coinrun, dodgeball, fruitbot, heist, jumper, leaper, maze, miner, ninja, plunder, starpilot]
+    - name: seed
+      spec: discrete
+      values: [0,1,2]
+    - name: phase_split
+      spec: discrete
+      values: [0]

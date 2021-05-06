@@ -70,14 +70,15 @@ def maybe_update_summary(key, value):
 
 class MinibatchRlEvalWandb(MinibatchRlEval):
 
-    def __init__(self, final_eval_only=False, *args, **kwargs):
+    def __init__(self, final_eval_only=False,env_name='leaper', *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.final_eval_only = final_eval_only
+        self.env_name = env_name
 
     def log_diagnostics(self, itr, eval_traj_infos, eval_time):
         cum_steps = (itr + 1) * self.sampler.batch_size * self.world_size
         self.wandb_info = {'cum_steps': cum_steps}
-        super().log_diagnostics(itr, eval_traj_infos, eval_time)
+        super().log_diagnostics(itr, eval_traj_infos, eval_time, prefix = 'Eval')
         wandb.log(self.wandb_info)
 
     def startup(self):
@@ -145,6 +146,7 @@ class MinibatchRlEvalWandb(MinibatchRlEval):
                     values = [info[k] for info in traj_infos]
                     logger.record_tabular_misc_stat(k,
                                                     values)
+<<<<<<< HEAD
 
                     wandb.run.summary[k] = np.average(values)
                     self.wandb_info[k + "Average"] = np.average(values)
@@ -155,6 +157,16 @@ class MinibatchRlEvalWandb(MinibatchRlEval):
                     if k == 'GameScore':
                         wandb.run.summary[k] = np.average(values)
                         self.wandb_info[k + "Average"] = np.average(values)
+=======
+                    if 'Return' in k:
+                        wandb.run.summary[k] = np.average(values)
+                        self.wandb_info[self.env_name + "/" + k + "Average"] = np.average(values)
+                    # self.wandb_info[k + "Std"] = np.std(values)
+                    # self.wandb_info[k + "Min"] = np.min(values)
+                    # self.wandb_info[k + "Max"] = np.max(values)
+                    # self.wandb_info[k + "Median"] = np.median(values)
+                    # if k == 'GameScore':
+>>>>>>> 044807de0422755438721831ab2508b472235d50
                     #     game = self.sampler.env_kwargs['game']
                     #     random_score = atari_random_scores[game]
                     #     der_score = atari_der_scores[game]
@@ -175,8 +187,11 @@ class MinibatchRlEvalWandb(MinibatchRlEval):
         if self._opt_infos:
             for k, v in self._opt_infos.items():
                 logger.record_tabular_misc_stat(k, v)
-                self.wandb_info[k] = np.average(v)
-                wandb.run.summary[k] = np.average(v)
+                if 'Return' in k:
+                    wandb.run.summary[k] = np.average(v)
+                    self.wandb_info[self.env_name + "/" + k + "Average"] = np.average(v)
+                # self.wandb_info[k] = np.average(v)
+                # wandb.run.summary[k] = np.average(v)
         self._opt_infos = {k: list() for k in self._opt_infos}  # (reset)
 
     def evaluate_agent(self, itr):
@@ -227,6 +242,11 @@ class MinibatchRlEvalWandb(MinibatchRlEval):
                 if (itr + 1) % self.log_interval_itrs == 0:
                     eval_traj_infos, eval_time = self.evaluate_agent(itr)
                     self.log_diagnostics(itr, eval_traj_infos, eval_time)
+
+                    cum_steps = (itr + 1) * self.sampler.batch_size * self.world_size
+                    self.wandb_info = {'cum_steps': cum_steps}
+                    super().log_diagnostics(itr, eval_traj_infos, eval_time, prefix = 'Train')
+                    wandb.log(self.wandb_info)
         self.shutdown()
 
 

@@ -16,7 +16,6 @@ from procgen import ProcgenEnv
 from baselines.common.vec_env import (
     VecExtractDictObs,
     VecFrameStack,
-    VecNormalize,
     VecEnvWrapper
 )
 

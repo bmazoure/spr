@@ -56,13 +56,16 @@ def build_and_train(game="pong", run_ID=0, cuda_idx=0, args=None):
         sampler=sampler,
         n_steps=args.n_steps,
         affinity=dict(cuda_idx=cuda_idx),
-        log_interval_steps=100,
+        log_interval_steps=5000,#args.n_steps//args.num_logs,
         seed=args.seed,
+        env_name=args.game,
         final_eval_only=args.final_eval_only,
     )
     config = dict(game=game)
     name = "dqn_" + game
-    log_dir = "logs"
+    # log_dir = "logs"
+    
+    log_dir = os.path.join(os.getenv('PT_OUTPUT_DIR', os.path.abspath('./results/')), args.game)
     with logger_context(log_dir, run_ID, name, config, snapshot_mode="last"):
         runner.train()
 
@@ -83,7 +86,7 @@ if __name__ == "__main__":
     parser.add_argument('--grayscale', type=int, default=1)
     parser.add_argument('--framestack', type=int, default=4)
     parser.add_argument('--imagesize', type=int, default=84)
-    parser.add_argument('--n-steps', type=int, default=int(8e6))
+    parser.add_argument('--n-steps', type=int, default=int(100000))
     parser.add_argument('--dqn-hidden-size', type=int, default=256)
     parser.add_argument('--target-update-interval', type=int, default=1)
     parser.add_argument('--target-update-tau', type=float, default=1.)
@@ -133,7 +136,7 @@ if __name__ == "__main__":
     parser.add_argument('--min-steps-learn', type=int, default=2000)
     parser.add_argument('--eps-init', type=float, default=1.)
     parser.add_argument('--eps-final', type=float, default=0.)
-    parser.add_argument('--final-eval-only', type=int, default=1)
+    parser.add_argument('--final-eval-only', type=int, default=0)
     parser.add_argument('--time-offset', type=int, default=0)
     parser.add_argument('--project', type=str, default="mpr")
     parser.add_argument('--entity', type=str, default="abs-world-models")
@@ -144,10 +147,16 @@ if __name__ == "__main__":
     parser.add_argument('--phase_split', type=int, default=0)
     args = parser.parse_args()
 
-    if args.public:
-        wandb.init(anonymous="allow", config=args, tags=[args.tag] if args.tag else None, dir=args.wandb_dir,mode="disabled")
-    else:
-        wandb.init(project=args.project, entity=args.entity, config=args, tags=[args.tag] if args.tag else None, dir=args.wandb_dir,mode="disabled")
+    # if args.public:
+    #     wandb.init(anonymous="allow", config=args, tags=[args.tag] if args.tag else None, dir=args.wandb_dir,mode="disabled")
+    # else:
+    #     wandb.init(project=args.project, entity=args.entity, config=args, tags=[args.tag] if args.tag else None, dir=args.wandb_dir,mode="disabled")
+    import os
+    os.environ["WANDB_API_KEY"] = "02e3820b69de1b1fcc645edcfc3dd5c5079839a1"
+    group_name = "%s__%d" %(args.game,args.phase_split)
+    name = "%s__%d__%d" %(args.game,args.phase_split,np.random.randint(100000000))
+    wandb.init(project='procgen_generalization_spr', entity='bmazoure', group=group_name, name=name, mode="online")
+
     wandb.config.update(vars(args))
     build_and_train(game=args.game,
                     cuda_idx=args.cuda_idx,
