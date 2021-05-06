@@ -75,11 +75,14 @@ class MinibatchRlEvalWandb(MinibatchRlEval):
         self.final_eval_only = final_eval_only
         self.env_name = env_name
 
-    def log_diagnostics(self, itr, eval_traj_infos, eval_time):
+    def log_diagnostics(self, itr, eval_traj_infos, eval_time, prefix='Eval'):
         cum_steps = (itr + 1) * self.sampler.batch_size * self.world_size
         self.wandb_info = {'cum_steps': cum_steps}
-        super().log_diagnostics(itr, eval_traj_infos, eval_time, prefix = 'Eval')
+        with logger.tabular_prefix(prefix):
+            self.prefix = prefix
+            super().log_diagnostics(itr, eval_traj_infos, eval_time)
         wandb.log(self.wandb_info)
+
 
     def startup(self):
         """
@@ -146,32 +149,13 @@ class MinibatchRlEvalWandb(MinibatchRlEval):
                     values = [info[k] for info in traj_infos]
                     logger.record_tabular_misc_stat(k,
                                                     values)
-                    if 'Return' in k:
+                    if 'Return' in k or 'GameScore' in k:
                         wandb.run.summary[k] = np.average(values)
-                        self.wandb_info[self.env_name + "/" + k + "Average"] = np.average(values)
+                        self.wandb_info[self.env_name + "/" + self.prefix + k] = np.average(values)
                     # self.wandb_info[k + "Std"] = np.std(values)
                     # self.wandb_info[k + "Min"] = np.min(values)
                     # self.wandb_info[k + "Max"] = np.max(values)
                     # self.wandb_info[k + "Median"] = np.median(values)
-                    if k == 'GameScore':
-                        wandb.run.summary[k] = np.average(values)
-                        self.wandb_info[self.env_name + "/" + k + "Average"] = np.average(values)
-                    #     game = self.sampler.env_kwargs['game']
-                    #     random_score = atari_random_scores[game]
-                    #     der_score = atari_der_scores[game]
-                    #     nature_score = atari_nature_scores[game]
-                    #     human_score = atari_human_scores[game]
-                    #     normalized_score = (np.average(values) - random_score) / (human_score - random_score)
-                    #     der_normalized_score = (np.average(values) - random_score) / (der_score - random_score)
-                    #     nature_normalized_score = (np.average(values) - random_score) / (nature_score - random_score)
-                    #     self.wandb_info[k + "Normalized"] = normalized_score
-                    #     self.wandb_info[k + "DERNormalized"] = der_normalized_score
-                    #     self.wandb_info[k + "NatureNormalized"] = nature_normalized_score
-
-                    #     maybe_update_summary(k+"Best", np.average(values))
-                    #     maybe_update_summary(k+"NormalizedBest", normalized_score)
-                    #     maybe_update_summary(k+"DERNormalizedBest", der_normalized_score)
-                    #     maybe_update_summary(k+"NatureNormalizedBest", nature_normalized_score)
 
         if self._opt_infos:
             for k, v in self._opt_infos.items():
@@ -226,14 +210,12 @@ class MinibatchRlEvalWandb(MinibatchRlEval):
                 self.agent.train_mode(itr)
                 opt_info = self.algo.optimize_agent(itr, samples)
                 self.store_diagnostics(itr, traj_infos, opt_info)
-                
+
                 if (itr + 1) % self.log_interval_itrs == 0:
                     eval_traj_infos, eval_time = self.evaluate_agent(itr)
-                    self.log_diagnostics(itr, eval_traj_infos, eval_time)
+                    self.log_diagnostics(itr, eval_traj_infos, eval_time, prefix = 'Eval')
 
-                    cum_steps = (itr + 1) * self.sampler.batch_size * self.world_size
-                    self.wandb_info = {'cum_steps': cum_steps}
-                    super().log_diagnostics(itr, eval_traj_infos, eval_time, prefix = 'Train')
+                    self.log_diagnostics(itr, traj_infos, eval_time, prefix = 'Train')
                     wandb.log(self.wandb_info)
         self.shutdown()
 
