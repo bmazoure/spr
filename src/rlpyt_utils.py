@@ -78,7 +78,7 @@ class MinibatchRlEvalWandb(MinibatchRlEval):
     def log_diagnostics(self, itr, eval_traj_infos, eval_time):
         cum_steps = (itr + 1) * self.sampler.batch_size * self.world_size
         self.wandb_info = {'cum_steps': cum_steps}
-        super().log_diagnostics(itr, eval_traj_infos, eval_time, prefix = 'Eval')
+        super().log_diagnostics(itr, eval_traj_infos, eval_time)
         wandb.log(self.wandb_info)
 
     def startup(self):
